@@ -1,4 +1,4 @@
-'''
+
 parser grammar AirQualityParser;
 
 options { tokenVocab=AirQualityLexer; }
@@ -39,4 +39,4 @@ unit : PPM | PPB | UGM3 | PERCENT ;
 
 // Air quality category
 quality : GOOD | MODERATE | UNHEALTHY | HAZARDOUS ;
-'''
+
