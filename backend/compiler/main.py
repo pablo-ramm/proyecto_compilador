@@ -8,6 +8,8 @@ from datetime import datetime
 from antlr4 import *
 from AirQualityLexer import AirQualityLexer
 from AirQualityParser import AirQualityParser
+from FechaLexer import FechaLexer
+from FechaParser import FechaParser
 from antlr4.tree.Trees import Trees
 
 class AirQualityNormalizer:
@@ -43,6 +45,15 @@ class AirQualityNormalizer:
         'CO': {'ppb': 0.001, 'ppm': 1}  # 1 ppb = 0.001 ppm
     }
     
+    MES_TEXTO_MAP = {
+        'ene': '01', 'enero': '01', 'feb': '02', 'febrero': '02',
+        'mar': '03', 'marzo': '03', 'abr': '04', 'abril': '04',
+        'may': '05', 'mayo': '05', 'jun': '06', 'junio': '06',
+        'jul': '07', 'julio': '07', 'ago': '08', 'agosto': '08',
+        'sep': '09', 'septiembre': '09', 'oct': '10', 'octubre': '10',
+        'nov': '11', 'noviembre': '11', 'dic': '12', 'diciembre': '12',
+    }
+
     def __init__(self, db_path=None):
         """
         Initialize the normalizer
@@ -370,6 +381,44 @@ class AirQualityNormalizer:
         df = self.to_dataframe()
         df.to_json(output_path, orient='records', indent=2)
 
+def parse_fecha(fecha_str):
+    input_stream = InputStream(fecha_str)
+    lexer = FechaLexer(input_stream)
+    stream = CommonTokenStream(lexer)
+    parser = FechaParser(stream)
+    tree = parser.fecha()
+
+    stream.fill()
+    # Ignorar separadores como espacios, comas, /, -
+    tokens = [t.text for t in stream.tokens if t.type not in {FechaLexer.WS, FechaLexer.COMA} and t.text not in {'/', '-', '<EOF>'}]
+    print("Tokens:", tokens)
+
+    try:
+        if '/' in fecha_str:
+            mes, dia, anio = tokens
+        elif '-' in fecha_str:
+            if len(tokens[0]) == 4:
+                anio, mes, dia = tokens
+            else:
+                dia, mes, anio = tokens
+        else:
+            if tokens[0].isdigit():
+                dia = tokens[0]
+                mes = MES_TEXTO_MAP.get(tokens[1].lower(), tokens[1])  # puede ser número o texto
+                anio = tokens[2]
+            else:
+                mes = MES_TEXTO_MAP.get(tokens[0].lower(), tokens[0])
+                dia = tokens[1]
+                anio = tokens[2]
+
+        # Validar fecha usando datetime
+        fecha_valida = datetime(int(anio), int(mes), int(dia))
+        return fecha_valida.strftime("%Y-%m-%d")
+
+    except (ValueError, IndexError, KeyError) as e:
+        print("Error:", e)
+        return "Formato no reconocido"
+
 # Example usage
 def main():
     import argparse
@@ -390,5 +439,17 @@ def main():
         normalizer.save_to_json(args.output)
     
     print(f"Normalized data saved to {args.output}")
+    
+    print(parse_fecha("Ene, 29, 2000"))     # 2000-01-29
+    print(parse_fecha("01/29/2000"))        # 2000-01-29
+    print(parse_fecha("29 Enero 2000"))     # 2000-01-29
+    print(parse_fecha("2000-01-29"))        # 2000-01-29
+    print(parse_fecha("29-01-2000"))        # 2000-01-29
+
+    print(parse_fecha("Febrero, 30, 2000")) # Formato no reconocido
+    print(parse_fecha("03/29/2000"))        # 2000-03-29
+    print(parse_fecha("29 Junio 2000"))     # 2000-06-29
+    print(parse_fecha("2000-12-29"))        # 2000-12-29
+    print(parse_fecha("29-13-2000"))        # Formato no reconocido
 
 if __name__ == "__main__":
